@@ -1,4 +1,26 @@
-.venv/
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+
+# IDE
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Model weights
+*.pt
+!weights/*.pt
+
+# Folders you don’t want to track
+images/
+labels/
 output/
+runs/
+subset/
