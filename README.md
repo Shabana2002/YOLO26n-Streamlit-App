@@ -4,8 +4,8 @@ emoji: 🤖
 colorFrom: blue
 colorTo: purple
 sdk: gradio
-sdk_version: "3.59"       # the actual Gradio version you want to use
-python_version: "3.13"    # matches your container Python
+sdk_version: "3.59"
+python_version: "3.13"
 app_file: app.py
 pinned: false
 ---
