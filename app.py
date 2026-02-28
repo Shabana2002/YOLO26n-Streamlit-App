@@ -13,8 +13,12 @@ MODEL_PATH = "weights/best.pt"
 OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Load YOLO model
-model = YOLO(MODEL_PATH)
+# Load YOLO model safely for Streamlit Cloud
+@st.cache_resource
+def load_model():
+    return YOLO(MODEL_PATH)
+
+model = load_model()
 
 # ----------------------------
 # STREAMLIT PAGE CONFIG
