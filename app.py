@@ -4,15 +4,16 @@ import cv2
 import numpy as np
 from PIL import Image
 import os
-import av  # New requirement for WebRTC
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+import av
+from streamlit_webrtc import webrtc_streamer, RTCConfiguration, WebRtcMode
 
 # ----------------------------
-# SETTINGS
+# SETTINGS & MODEL LOADING
 # ----------------------------
 MODEL_PATH = "weights/best.pt"
-OUTPUT_DIR = "output"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}]}
+)
 
 
 @st.cache_resource
@@ -31,37 +32,43 @@ st.title("YOLO26n Object Detection App 🕵️‍♂️")
 option = st.sidebar.radio("Select Input Type", ["Webcam", "Image Upload"])
 
 # ----------------------------
-# WEBCAM (Cloud Compatible)
+# WEBCAM (Cloud Optimized)
 # ----------------------------
 if option == "Webcam":
     st.subheader("Webcam Live Prediction")
 
 
-    class YOLOVideoProcessor(VideoProcessorBase):
-        def recv(self, frame):
-            # Convert WebRTC frame to numpy array (BGR)
-            img = frame.to_ndarray(format="bgr24")
+    # Define the processing function (Modern way)
+    def video_frame_callback(frame):
+        img = frame.to_ndarray(format="bgr24")
 
-            # YOLO Prediction (Same logic as your original)
-            results = model.predict(img, imgsz=416)
-            annotated_frame = results[0].plot()
+        # Performance Tip: Resize image before prediction to speed up CPU inference
+        # YOLO will handle the resizing, but 320 is faster than 416/640
+        results = model.predict(img, imgsz=320, conf=0.25, verbose=False)
+        annotated_frame = results[0].plot()
 
-            # Return the annotated frame back to the browser
-            return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
+        return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
 
-    # This replaces the while loop and cv2.VideoCapture
+    # Use the modern webrtc_streamer setup
     webrtc_streamer(
         key="yolo-detection",
-        video_processor_factory=YOLOVideoProcessor,
-        rtc_configuration={
-            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+        mode=WebRtcMode.SENDRECV,
+        rtc_configuration=RTC_CONFIGURATION,
+        video_frame_callback=video_frame_callback,  # Use callback instead of ProcessorClass
+        media_stream_constraints={
+            "video": {
+                "width": {"ideal": 640},
+                "height": {"ideal": 480},
+                "frameRate": {"ideal": 15}  # Lower FPS = smoother processing on CPU
+            },
+            "audio": False
         },
-        media_stream_constraints={"video": True, "audio": False},
+        async_processing=True,  # FIXED: This stops the app from freezing while YOLO "thinks"
     )
 
 # ----------------------------
-# IMAGE UPLOAD (Kept exactly the same)
+# IMAGE UPLOAD
 # ----------------------------
 elif option == "Image Upload":
     st.subheader("Upload Images for Prediction")
@@ -73,11 +80,5 @@ elif option == "Image Upload":
         for uploaded_file in uploaded_files:
             image = Image.open(uploaded_file).convert("RGB")
             img_array = np.array(image)
-
             results = model.predict(img_array, imgsz=416)
-            annotated_img = results[0].plot()
-
-            st.image(annotated_img, width=800)
-
-            out_path = os.path.join(OUTPUT_DIR, f"pred_{uploaded_file.name}")
-            cv2.imwrite(out_path, cv2.cvtColor(annotated_img, cv2.COLOR_RGB2BGR))
+            st.image(results[0].plot(), width=800)
