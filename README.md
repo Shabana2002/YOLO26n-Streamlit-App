@@ -1,8 +1,8 @@
 ---
-title: YOLO26n Gradio App
-emoji: "🤖"
-colorFrom: "orange"
-colorTo: "red"
+title: YOLO App
+emoji: 🐶
+colorFrom: blue
+colorTo: purple
 sdk: gradio
 sdk_version: "3.59"
 python_version: "3.13"
