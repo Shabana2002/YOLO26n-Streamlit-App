@@ -12,7 +12,7 @@ from streamlit_webrtc import webrtc_streamer, RTCConfiguration, WebRtcMode
 # ----------------------------
 MODEL_PATH = "weights/best.pt"
 
-# UPDATED: Enhanced STUN settings to bypass firewalls
+# Enhanced STUN settings to bypass firewalls
 RTC_CONFIGURATION = RTCConfiguration(
     {
         "iceServers": [
@@ -48,31 +48,28 @@ if option == "Webcam":
     def video_frame_callback(frame):
         img = frame.to_ndarray(format="bgr24")
 
-        # Performance Tip: imgsz=256 is much faster on Cloud CPUs than 320/416
+        # Performance Tip: imgsz=256 is much faster on Cloud CPUs
         results = model.predict(img, imgsz=256, conf=0.25, verbose=False)
         annotated_frame = results[0].plot()
 
         return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
-    # Use the streamer with robust settings
+    # Use the optimized streamer settings
     webrtc_streamer(
-        key="yolo-detection",
+        key="yolo-detection-v2",  # Changed key to force a refresh
         mode=WebRtcMode.SENDRECV,
         rtc_configuration=RTC_CONFIGURATION,
         video_frame_callback=video_frame_callback,
-        # async_processing=True is the key to preventing the "Connection taking longer" error
         async_processing=True,
         media_stream_constraints={
             "video": {
-                "width": {"ideal": 640},
-                "height": {"ideal": 480},
-                "frameRate": {"ideal": 15}
+                "width": {"max": 320},   # Force small to save CPU
+                "height": {"max": 240},
+                "frameRate": {"max": 10} # 10 FPS is enough for a cloud demo
             },
-            "audio": False
+            "audio": False,
         },
-        # These help the browser handle the "Play" button better
-        sendback_audio=False,
-        video_receiver_size=1,
+        desired_playing_state=True, # Helps the play button respond faster
     )
 
 # ----------------------------
