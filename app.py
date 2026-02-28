@@ -11,15 +11,22 @@ from streamlit_webrtc import webrtc_streamer, RTCConfiguration, WebRtcMode
 # SETTINGS & MODEL LOADING
 # ----------------------------
 MODEL_PATH = "weights/best.pt"
-RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}]}
-)
 
+# UPDATED: Enhanced STUN settings to bypass firewalls
+RTC_CONFIGURATION = RTCConfiguration(
+    {
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
+            {"urls": ["stun:stun2.l.google.com:19302", "stun:stun3.l.google.com:19302"]},
+            {"urls": ["stun:stun4.l.google.com:19302"]},
+        ],
+        "iceTransportPolicy": "all",
+    }
+)
 
 @st.cache_resource
 def load_model():
     return YOLO(MODEL_PATH)
-
 
 model = load_model()
 
@@ -37,34 +44,35 @@ option = st.sidebar.radio("Select Input Type", ["Webcam", "Image Upload"])
 if option == "Webcam":
     st.subheader("Webcam Live Prediction")
 
-
-    # Define the processing function (Modern way)
+    # The modern callback function
     def video_frame_callback(frame):
         img = frame.to_ndarray(format="bgr24")
 
-        # Performance Tip: Resize image before prediction to speed up CPU inference
-        # YOLO will handle the resizing, but 320 is faster than 416/640
-        results = model.predict(img, imgsz=320, conf=0.25, verbose=False)
+        # Performance Tip: imgsz=256 is much faster on Cloud CPUs than 320/416
+        results = model.predict(img, imgsz=256, conf=0.25, verbose=False)
         annotated_frame = results[0].plot()
 
         return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
-
-    # Use the modern webrtc_streamer setup
+    # Use the streamer with robust settings
     webrtc_streamer(
         key="yolo-detection",
         mode=WebRtcMode.SENDRECV,
         rtc_configuration=RTC_CONFIGURATION,
-        video_frame_callback=video_frame_callback,  # Use callback instead of ProcessorClass
+        video_frame_callback=video_frame_callback,
+        # async_processing=True is the key to preventing the "Connection taking longer" error
+        async_processing=True,
         media_stream_constraints={
             "video": {
                 "width": {"ideal": 640},
                 "height": {"ideal": 480},
-                "frameRate": {"ideal": 15}  # Lower FPS = smoother processing on CPU
+                "frameRate": {"ideal": 15}
             },
             "audio": False
         },
-        async_processing=True,  # FIXED: This stops the app from freezing while YOLO "thinks"
+        # These help the browser handle the "Play" button better
+        sendback_audio=False,
+        video_receiver_size=1,
     )
 
 # ----------------------------
@@ -81,4 +89,4 @@ elif option == "Image Upload":
             image = Image.open(uploaded_file).convert("RGB")
             img_array = np.array(image)
             results = model.predict(img_array, imgsz=416)
-            st.image(results[0].plot(), width=800)
+            st.image(results[0].plot(), use_container_width=True)
