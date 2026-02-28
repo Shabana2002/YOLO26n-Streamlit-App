@@ -1,5 +1,7 @@
-gradio>=3.59
+streamlit
 ultralytics
+opencv-python-headless
 numpy
 pillow
-requests
+streamlit-webrtc
+av

@@ -1,71 +1,83 @@
-import gradio as gr
+import streamlit as st
 from ultralytics import YOLO
+import cv2
 import numpy as np
 from PIL import Image
 import os
-import requests
+import av  # New requirement for WebRTC
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 
 # ----------------------------
 # SETTINGS
 # ----------------------------
-MODEL_URL = "https://huggingface.co/Ambatt/yolo26n-best/resolve/main/best.pt"  # Replace Ambatt with your HF username
 MODEL_PATH = "weights/best.pt"
 OUTPUT_DIR = "output"
-
-os.makedirs("weights", exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ----------------------------
-# DOWNLOAD MODEL IF NOT EXISTS
-# ----------------------------
-if not os.path.exists(MODEL_PATH):
-    print("Downloading YOLO model...")
-    r = requests.get(MODEL_URL, stream=True)
-    with open(MODEL_PATH, "wb") as f:
-        for chunk in r.iter_content(chunk_size=8192):
-            f.write(chunk)
-    print("Download complete!")
+
+@st.cache_resource
+def load_model():
+    return YOLO(MODEL_PATH)
+
+
+model = load_model()
 
 # ----------------------------
-# LOAD YOLO MODEL
+# STREAMLIT PAGE CONFIG
 # ----------------------------
-model = YOLO(MODEL_PATH)
+st.set_page_config(page_title="YOLO26n Detection App", layout="wide")
+st.title("YOLO26n Object Detection App 🕵️‍♂️")
 
-# ----------------------------
-# DETECTION FUNCTION
-# ----------------------------
-def detect(input_type, input_image):
-    """
-    Detect objects using YOLO.
-    Supports webcam frames and uploaded images.
-    """
-    if input_type == "Image Upload" and input_image is not None:
-        img_array = np.array(input_image.convert("RGB"))
-    elif input_type == "Webcam" and input_image is not None:
-        img_array = input_image  # already numpy array from Gradio webcam
-    else:
-        return None
-
-    results = model.predict(img_array, imgsz=416)
-    annotated_img = results[0].plot()
-
-    # Save output
-    out_path = os.path.join(OUTPUT_DIR, "pred_output.png")
-    Image.fromarray(annotated_img).save(out_path)
-
-    return annotated_img
+option = st.sidebar.radio("Select Input Type", ["Webcam", "Image Upload"])
 
 # ----------------------------
-# GRADIO INTERFACE
+# WEBCAM (Cloud Compatible)
 # ----------------------------
-iface = gr.Interface(
-    fn=detect,
-    inputs=[
-        gr.Radio(["Webcam", "Image Upload"], label="Select Input Type"),
-        gr.Image(source="webcam", type="numpy", tool="editor", label="Webcam / Upload Image")
-    ],
-    outputs=gr.Image(type="numpy", label="Detected Output"),
-    live=True
-)
+if option == "Webcam":
+    st.subheader("Webcam Live Prediction")
 
-iface.launch()
+
+    class YOLOVideoProcessor(VideoProcessorBase):
+        def recv(self, frame):
+            # Convert WebRTC frame to numpy array (BGR)
+            img = frame.to_ndarray(format="bgr24")
+
+            # YOLO Prediction (Same logic as your original)
+            results = model.predict(img, imgsz=416)
+            annotated_frame = results[0].plot()
+
+            # Return the annotated frame back to the browser
+            return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
+
+
+    # This replaces the while loop and cv2.VideoCapture
+    webrtc_streamer(
+        key="yolo-detection",
+        video_processor_factory=YOLOVideoProcessor,
+        rtc_configuration={
+            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+        },
+        media_stream_constraints={"video": True, "audio": False},
+    )
+
+# ----------------------------
+# IMAGE UPLOAD (Kept exactly the same)
+# ----------------------------
+elif option == "Image Upload":
+    st.subheader("Upload Images for Prediction")
+    uploaded_files = st.file_uploader(
+        "Upload 1 or more images", type=["jpg", "jpeg", "png"], accept_multiple_files=True
+    )
+
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            image = Image.open(uploaded_file).convert("RGB")
+            img_array = np.array(image)
+
+            results = model.predict(img_array, imgsz=416)
+            annotated_img = results[0].plot()
+
+            st.image(annotated_img, width=800)
+
+            out_path = os.path.join(OUTPUT_DIR, f"pred_{uploaded_file.name}")
+            cv2.imwrite(out_path, cv2.cvtColor(annotated_img, cv2.COLOR_RGB2BGR))
