@@ -1,4 +1,7 @@
 import streamlit as st
+# THIS MUST BE THE VERY FIRST STREAMLIT COMMAND
+st.set_page_config(page_title="YOLO26n Detection App", layout="wide")
+
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -31,11 +34,9 @@ def load_model():
 model = load_model()
 
 # ----------------------------
-# STREAMLIT PAGE CONFIG
+# UI ELEMENTS
 # ----------------------------
-st.set_page_config(page_title="YOLO26n Detection App", layout="wide")
 st.title("YOLO26n Object Detection App 🕵️‍♂️")
-
 option = st.sidebar.radio("Select Input Type", ["Webcam", "Image Upload"])
 
 # ----------------------------
@@ -44,32 +45,28 @@ option = st.sidebar.radio("Select Input Type", ["Webcam", "Image Upload"])
 if option == "Webcam":
     st.subheader("Webcam Live Prediction")
 
-    # The modern callback function
     def video_frame_callback(frame):
         img = frame.to_ndarray(format="bgr24")
-
-        # Performance Tip: imgsz=256 is much faster on Cloud CPUs
+        # Keep imgsz small for Cloud CPU speed
         results = model.predict(img, imgsz=256, conf=0.25, verbose=False)
         annotated_frame = results[0].plot()
-
         return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
-    # Use the optimized streamer settings
     webrtc_streamer(
-        key="yolo-detection-v2",  # Changed key to force a refresh
+        key="yolo-detection-v3",
         mode=WebRtcMode.SENDRECV,
         rtc_configuration=RTC_CONFIGURATION,
         video_frame_callback=video_frame_callback,
         async_processing=True,
         media_stream_constraints={
             "video": {
-                "width": {"max": 320},   # Force small to save CPU
+                "width": {"max": 320},
                 "height": {"max": 240},
-                "frameRate": {"max": 10} # 10 FPS is enough for a cloud demo
+                "frameRate": {"max": 10}
             },
             "audio": False,
         },
-        desired_playing_state=True, # Helps the play button respond faster
+        desired_playing_state=True,
     )
 
 # ----------------------------
@@ -78,7 +75,7 @@ if option == "Webcam":
 elif option == "Image Upload":
     st.subheader("Upload Images for Prediction")
     uploaded_files = st.file_uploader(
-        "Upload 1 or more images", type=["jpg", "jpeg", "png"], accept_multiple_files=True
+        "Upload images", type=["jpg", "jpeg", "png"], accept_multiple_files=True
     )
 
     if uploaded_files:
